@@ -2,6 +2,11 @@ import os
 import subprocess
 from langchain.tools import StructuredTool, tool
 from langchain.agents import initialize_agent, AgentType
+from langchain_openai import ChatOpenAI
+
+
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+llm = ChatOpenAI(temperature=0)
 
 @tool
 def open_calendar():
@@ -9,6 +14,8 @@ def open_calendar():
   calendar_app_path = "/System/Applications/Calendar.app"
   subprocess.run(["open", calendar_app_path])
 
+
+   
 @tool
 def check_availability(date: str):
   """Check availability in the Calendar app"""
@@ -73,3 +80,15 @@ end_date = "3/19/2024 10:00 AM"
 #check_availability(start_date)
 
 tools = [open_calendar, create_event, check_availability]
+agent_executor = initialize_agent(
+   tools, 
+   llm, 
+   agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+   verbose=True
+)
+
+agent_executor.invoke(
+   {
+      "input": "Schedule a meeting with Sean for 1PM on 3/20/2024"
+   }
+)
