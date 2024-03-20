@@ -2,17 +2,14 @@ import os
 import subprocess
 from langchain.pydantic_v1 import BaseModel, Field
 from langchain.tools import BaseTool, StructuredTool, tool
-from langchain.agents import initialize_agent, AgentType
-from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.agents import initialize_agent, AgentType, AgentExecutor, create_react_agent, create_structured_chat_agent
 from langchain_openai import ChatOpenAI
 from typing import Optional, Type
 from langchain.callbacks.manager import (
     AsyncCallbackManagerForToolRun,
     CallbackManagerForToolRun,
 )
-
-openai_api_key = os.environ.get("OPENAI_API_KEY")
-llm = ChatOpenAI(temperature=0)
+from langchain import hub
 
 @tool
 def open_calendar():
@@ -24,8 +21,8 @@ class AppleScriptDate(BaseModel):
    date: str = Field(description="Date in the format of MM/DD/YYYY TT:TT")
 
 class CheckAvailability(BaseTool):
-  name = "Check availability",
-  description = "Check availability in the Calendar app"
+  name = "Check availability in the Calendar app"
+  description = "Use this tool to make sure there are no conflicting events on the calendar"
   args_schema: Type[BaseModel] = AppleScriptDate
 
   def _run(
@@ -69,7 +66,7 @@ class CheckAvailability(BaseTool):
 availability_checker = CheckAvailability()
 
 class CreateEventInput(BaseModel):
-   summary: str = Field(description="A description of the event")
+   summary: str = Field(description="A description of the event to create")
    start_date: str = Field(description="Start date of the event in the format of MM/DD/YYYY TT:TT")
    end_date: str = Field(description="End date of the event in the format of MM/DD/YYYY TT:TT")
 
@@ -96,27 +93,34 @@ def create_calendar_event(summary: str, start_date: str, end_date: str):
 create_event = StructuredTool.from_function(
    func=create_calendar_event,
    name="Create Event",
-   description="Create an event in the Calendar app",
+   description="Use this tool to create an event in the Calendar app",
    args_schema=CreateEventInput,
    return_direct=True
 )
 
-
 #Example usage
 summary = "Meeting with John"
-start_date = "3/19/2024 9:00 AM"
-end_date = "3/19/2024 10:00 AM"
+start_date = "3/19/2024 13:00"
+end_date = "3/19/2024 14:00"
 
+openai_api_key = os.environ.get("OPENAI_API_KEY")
+
+# Choose the LLM to use
+llm = ChatOpenAI(temperature=0)
+
+# Define the tools that the agent has access to
 tools = [open_calendar, create_event, availability_checker]
-agent_executor = initialize_agent(
-   tools, 
-   llm, 
-   agent=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-   verbose=True
-)
+
+# Define or pull the prompt from langchain hub
+prompt = hub.pull("hwchase17/structured-chat-agent")
+
+# Construct the ReAct agent
+agent = create_structured_chat_agent(llm, tools, prompt)
+
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 agent_executor.invoke(
    {
-      "input": "Schedule a meeting with Sean for 1PM on 3/20/2024"
+      "input": "Schedule a meeting with Sean for 13:00 on 3/20/2024"
    }
 )
